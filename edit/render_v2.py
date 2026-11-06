@@ -35,12 +35,19 @@ SILENCES = [(2.28, 2.81), (5.36, 5.85), (10.06, 10.44), (12.92, 13.45), (14.51, 
             (135.33, 135.75)]
 END = 193.42
 PAD = 0.09
+# Nếu có CUTS=<cuts.json> (tạo bởi edit/find_cuts.py: lặng + à/ừm + vấp + lặp từ) thì dùng danh sách đó.
+if os.environ.get("CUTS"):
+    import json
+    CUT_LIST = [(s, e) for s, e, *_ in json.load(open(os.environ["CUTS"]))]
+else:
+    CUT_LIST = [(s + PAD, e - PAD) for s, e in SILENCES if e - s > 0.3]
 SEGS, cur = [], 0.0
-for s, e in SILENCES:
-    if e - s > 0.3:
-        SEGS.append((cur, s + PAD))
-        cur = e - PAD
-SEGS.append((cur, END))
+for s, e in sorted(CUT_LIST):
+    if s > cur + 0.05:
+        SEGS.append((cur, s))
+    cur = max(cur, e)
+if END > cur + 0.05:
+    SEGS.append((cur, END))
 
 frames = []
 for si, (a, b) in enumerate(SEGS):

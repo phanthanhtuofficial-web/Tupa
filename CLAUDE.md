@@ -9,6 +9,8 @@ Người dùng nói tiếng Việt – luôn trả lời bằng tiếng Việt, 
   `edit/render_<ten>.py` rồi sửa phần kịch bản, KHÔNG sửa file cũ.
 - `edit/render.py` – mẫu video ngắn đầu tiên (intro 27s).
 - `edit/transcribe.py` – chép lời tiếng Việt kèm mốc thời gian từng từ.
+- `edit/find_cuts.py` – tự tìm đoạn cần cắt: lặng, à/ừm, ngập ngừng, vấp, lặp từ.
+- `MAU_YEU_CAU.md` – mẫu tin nhắn người dùng gửi khi mở phiên mới.
 - `edit/setup.sh` – cài thư viện + mô hình chép lời (chạy 1 lần mỗi phiên, ~2 phút).
 - `edit/fonts/` – font Be Vietnam Pro (OFL).
 - `output/` – video thành phẩm.
@@ -21,6 +23,11 @@ Người dùng nói tiếng Việt – luôn trả lời bằng tiếng Việt, 
 3. Chép lời: `.venv-video/bin/python -I edit/transcribe.py work/<video> .whisper-model work/tr.json`
    Whisper hay nghe sai thuật ngữ ("kích bản", "cấu chúc", "giải hạn", "phét"=Fed): tự sửa khi viết chữ lên hình.
    Con số giá phải khớp lời nói; số nào không chắc thì hỏi lại hoặc bỏ, không tự bịa.
+3b. Tìm đoạn cắt (lặng, à/ừm, ngập ngừng, vấp, lặp từ):
+   `.venv-video/bin/python -I edit/find_cuts.py work/<video> work/tr.json edit/cuts_<ten>.json`
+   Đọc báo cáo, bỏ dòng nào cắt nhầm (sửa file json), rồi render với `CUTS=edit/cuts_<ten>.json`.
+   Whisper KHÔNG ghi "à/ừm" ra chữ – công cụ dò bằng âm lượng + khoảng trống giữa các từ.
+   Kiểm tra sau render: chép lời lại video output, đối chiếu chỗ cắt không mất chữ.
 4. Xem video: contact sheet `ffmpeg -i v -vf "fps=1/3,scale=200:-1,tile=11x3"`, tìm đoạn chèn biểu đồ
    (`select='gt(scene,0.25)'`), khoảng lặng (`silencedetect=n=-35dB:d=0.35`), vị trí khuôn mặt.
 5. Copy `render_v2.py`, sửa: `SILENCES`, `END`, `SCENES` (head / chart tĩnh / chart động / đồ họa g_*),
@@ -28,7 +35,7 @@ Người dùng nói tiếng Việt – luôn trả lời bằng tiếng Việt, 
    Mọi mốc thời gian theo **giây của video gốc**.
 6. Xem thử: `PREVIEW="1.5,8,30" .venv-video/bin/python -I edit/render_<ten>.py <video> edit/fonts preview.jpg`
    rồi đọc ảnh, sửa bố cục trước khi render thật.
-7. Render: `.venv-video/bin/python -I edit/render_<ten>.py <video> edit/fonts output/<ten>.mp4`
+7. Render: `CUTS=edit/cuts_<ten>.json .venv-video/bin/python -I edit/render_<ten>.py <video> edit/fonts output/<ten>.mp4`
    (~2 phút render cho mỗi phút video). Kiểm tra loudness ~ -14 LUFS, gửi file cho người dùng, commit + push.
 
 ## Quy tắc nội dung
