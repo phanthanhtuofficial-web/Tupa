@@ -5,7 +5,8 @@ font Be Vietnam Pro, sơ đồ node phát sáng, phụ đề in hoa có từ kh�
 Người dùng nói tiếng Việt – luôn trả lời bằng tiếng Việt, dễ hiểu, không thuật ngữ lập trình thừa.
 
 ## Cấu trúc
-- `edit/render_v2.py` – **mẫu chuẩn mới nhất** (video "2 kịch bản giá vàng"). Video mới: copy thành
+- `edit/render_vang-nonfarm.py` – **mẫu mới nhất, có tăng tốc 1.1x** (video "Non-farm 3 kịch bản").
+- `edit/render_v2.py` – mẫu chuẩn (video "2 kịch bản giá vàng"). Video mới: copy thành
   `edit/render_<ten>.py` rồi sửa phần kịch bản, KHÔNG sửa file cũ.
 - `edit/render.py` – mẫu video ngắn đầu tiên (intro 27s).
 - `edit/transcribe.py` – chép lời tiếng Việt kèm mốc thời gian từng từ.
@@ -37,6 +38,8 @@ Người dùng nói tiếng Việt – luôn trả lời bằng tiếng Việt, 
    rồi đọc ảnh, sửa bố cục trước khi render thật.
 7. Render: `CUTS=edit/cuts_<ten>.json .venv-video/bin/python -I edit/render_<ten>.py <video> edit/fonts output/<ten>.mp4`
    (~2 phút render cho mỗi phút video). Kiểm tra loudness ~ -14 LUFS, gửi file cho người dùng, commit + push.
+
+- Tốc độ: từ video Non-farm 06/11 dùng **1.1x** (biến `SPEED` trong script, giữ cao độ giọng).
 
 ## Quy tắc nội dung
 - Không dùng tên/logo kênh người khác. Không tự thêm số liệu, tin tức không có trong lời nói.
