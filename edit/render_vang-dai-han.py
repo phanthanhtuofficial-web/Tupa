@@ -77,9 +77,11 @@ SCENES = [
     (192.60, 212.40, "head"),
     (212.40, 239.50, "g_family"),
     (239.50, 318.40, "head"),
-    (318.40, 380.00, "g_hist"),
+    (318.40, 354.60, "c_hist1"),
+    (354.60, 380.00, "c_hist2"),
     (380.00, 469.70, "head"),
-    (469.70, 520.40, "g_short"),
+    (469.70, 476.70, "c_both"),
+    (476.70, 520.40, "g_short"),
     (520.40, 544.00, "head"),
     (544.00, 999.0, "g_smart"),
 ]
@@ -638,12 +640,12 @@ def g_hist(c, s):
 
 
 def g_short(c, s):
-    header(c, "Điều thú vị", s, 469.75)
-    place_node(c, "20 NĂM", 640, 470.7, s, cx=290, kind="calendar", sub="tích lũy nhịp 1", size=44)
-    place_node(c, "10 NĂM", 640, 471.3, s, cx=790, kind="calendar", sub="tích lũy nhịp 2", size=44, gold=True)
-    big_text(c, "TÍCH LŨY *NGẮN LẠI*", 76, 890, s, 474.1)
-    place_node(c, "VỐN HÓA NHỎ", 1160, 493.7, s, cx=290, kind="up", sub="lợi nhuận còn rất cao", size=40)
-    place_node(c, "VỐN HÓA LỚN", 1160, 500.7, s, cx=790, kind="down", sub="biên lợi nhuận thu hẹp", size=40,
+    header(c, "Về sau tích lũy càng ngắn", s, 476.75)
+    big_text(c, "TÍCH LŨY *NGẮN LẠI*", 76, 600, s, 476.75)
+    place_node(c, "20 NĂM", 820, 477.0, s, cx=290, kind="calendar", sub="tích lũy nhịp 1", size=44)
+    place_node(c, "10 NĂM", 820, 477.3, s, cx=790, kind="calendar", sub="tích lũy nhịp 2", size=44, gold=True)
+    place_node(c, "VỐN HÓA NHỎ", 1200, 493.7, s, cx=290, kind="up", sub="lợi nhuận còn rất cao", size=40)
+    place_node(c, "VỐN HÓA LỚN", 1200, 500.7, s, cx=790, kind="down", sub="biên lợi nhuận thu hẹp", size=40,
                gold=True)
 
 
@@ -662,6 +664,171 @@ def g_smart(c, s):
 
 GRAPHICS = {"g_sup": g_sup, "g_target": g_target, "g_macro": g_macro, "g_call": g_call, "g_family": g_family,
             "g_hist": g_hist, "g_short": g_short, "g_smart": g_smart}
+
+
+# ============================================================ biểu đồ lịch sử (quay màn hình của người dùng)
+# Khung hình lấy từ work/chart.mov (1920x886): f26 = đợt tăng 1, f92 = đợt tăng 2, f97 = cả 2 đợt.
+CHART_DIR = os.environ.get("CHART_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "chart_lichsu"))
+PADY = 250            # đệm đen trên/dưới để camera zoom tự do
+CARD_TOP, CARD_W, CARD_H = 600, 1080, 771   # khung biểu đồ trên màn hình (tỉ lệ 1.4)
+_charts = {}
+
+
+def chart_img(name):
+    if name not in _charts:
+        im = Image.open(os.path.join(CHART_DIR, f"{name}.png")).convert("RGB")
+        d = ImageDraw.Draw(im)
+        d.rectangle([0, 700, im.width, im.height], fill=(0, 0, 0))      # che thanh công cụ app
+        pad = Image.new("RGB", (im.width, im.height + 2 * PADY), (0, 0, 0))
+        pad.paste(im, (0, PADY))
+        _charts[name] = pad
+    return _charts[name]
+
+
+# trục: năm -> x, giá -> y (pixel khung gốc, chưa cộng PADY)
+AX = {"f26": (lambda yr: 230 + (yr - 1971) * 28.88, lambda p: 570 - p * 0.2219),
+      "f92": (lambda yr: 186 + (yr - 2009) * 61.7, lambda p: 642 - p * 0.0968),
+      "f97": (lambda yr: 188 + (yr - 1971) * 21.25, lambda p: 585 - p * 0.1073)}
+
+# camera: (src_t, x_trái, y_tâm (khung gốc), rộng)
+CAMS = {
+    "c_hist1": [(318.4, 330, 360, 1270), (329.6, 470, 470, 770), (337.4, 880, 345, 800)],
+    "c_hist2": [(354.6, 150, 340, 1300), (362.6, 380, 470, 750), (374.0, 470, 330, 920)],
+    "c_both": [(469.7, 140, 380, 1480), (474.0, 170, 380, 1420)],
+}
+
+
+def cam_at(sc, s):
+    k = CAMS[sc]
+    cur = k[0][1:]
+    for i in range(1, len(k)):
+        t0 = k[i][0]
+        if s >= t0:
+            q = ease_out((s - t0) / 1.1)
+            cur = tuple(a + (b - a) * q for a, b in zip(cur, k[i][1:]))
+    x0, yc, w = cur
+    h = w / (CARD_W / CARD_H)
+    return x0, yc + PADY - h / 2, w, h
+
+
+def draw_chart_card(c, name, sc, s):
+    x0, y0, w, h = cam_at(sc, s)
+    w *= 1 - 0.015 * math.sin(min(1, (s % 30) / 30) * math.pi)  # trôi nhẹ
+    img = chart_img(name).resize((CARD_W, CARD_H), Image.BICUBIC, box=(x0, y0, x0 + w, y0 + h))
+    lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    ImageDraw.Draw(lay).rounded_rectangle([4, CARD_TOP - 4, W - 5, CARD_TOP + CARD_H + 4], radius=22,
+                                          outline=GOLD + (170,), width=3)
+    c.alpha_composite(glow(lay, 18, 0.7))
+    m = Image.new("L", (CARD_W, CARD_H), 0)
+    ImageDraw.Draw(m).rounded_rectangle([0, 0, CARD_W - 1, CARD_H - 1], radius=20, fill=255)
+    c.paste(img, (0, CARD_TOP), m)
+    c.alpha_composite(lay)
+
+    fx, fy = AX[name]
+
+    def P(yr, price):  # (năm, giá) -> toạ độ màn hình
+        return ((fx(yr) - x0) / w * CARD_W, CARD_TOP + (fy(price) + PADY - y0) / h * CARD_H)
+    return P
+
+
+def clip_card(lay):
+    m = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(m).rectangle([0, CARD_TOP, W, CARD_TOP + CARD_H], fill=255)
+    a = Image.composite(lay.split()[3], Image.new("L", (W, H), 0), m)
+    lay.putalpha(a)
+    return lay
+
+
+def zone(c, P, y1, y2, plo, phi, label, s, t_in, label_out=1e9):
+    """Dải vàng đánh dấu giai đoạn tích lũy + ngoặc dưới + nhãn."""
+    p = ease_out((s - t_in) / 0.7)
+    if p <= 0:
+        return
+    (xa, ya), (xb, yb) = P(y1, phi), P(y2, plo)
+    xe = xa + (xb - xa) * p
+    lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(lay)
+    pulse = 0.5 + 0.5 * math.sin((s - t_in) * 3.5)
+    d.rectangle([xa, ya, xe, yb], fill=GOLD + (int(45 + 30 * pulse),), outline=GOLD + (230,), width=3)
+    by = yb + 26
+    d.line([xa, by, xe, by], fill=GOLD + (255,), width=5)
+    d.line([xa, by - 14, xa, by + 4], fill=GOLD + (255,), width=5)
+    if p >= 1:
+        d.line([xb, by - 14, xb, by + 4], fill=GOLD + (255,), width=5)
+    lay = clip_card(lay)
+    c.alpha_composite(glow(lay, 14, 1.0))
+    c.alpha_composite(lay)
+    cx = min(max((xa + xb) / 2, 230), W - 230)
+    if s < label_out:
+        pop(c, pill(label, 40), cx, min(by + 70, CARD_TOP + CARD_H - 40), s, t_in + 0.35)
+    for yr, x in ((y1, xa), (y2, xb)):
+        tag = rich_block([str(yr)], [34], weight="ExtraBold", pad=14)
+        pop(c, tag, min(max(x, 70), W - 70), ya - 34, s, t_in + 0.2)
+
+
+def rally(c, P, a, b, s, t_in, dur=1.4):
+    """Mũi tên vàng vẽ dần theo nhịp tăng."""
+    p = ease_out((s - t_in) / dur)
+    if p <= 0:
+        return
+    (x1, y1), (x2, y2) = P(*a), P(*b)
+    ex, ey = x1 + (x2 - x1) * p, y1 + (y2 - y1) * p
+    lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(lay)
+    d.line([x1, y1, ex, ey], fill=GOLD + (255,), width=9)
+    ang = math.atan2(ey - y1, ex - x1)
+    hl = 34
+    d.polygon([(ex + math.cos(ang) * 10, ey + math.sin(ang) * 10),
+               (ex - math.cos(ang - 0.45) * hl, ey - math.sin(ang - 0.45) * hl),
+               (ex - math.cos(ang + 0.45) * hl, ey - math.sin(ang + 0.45) * hl)], fill=GOLD + (255,))
+    d.ellipse([x1 - 10, y1 - 10, x1 + 10, y1 + 10], fill=(255, 236, 170, 255))
+    lay = clip_card(lay)
+    c.alpha_composite(glow(lay, 16, 1.4))
+    c.alpha_composite(lay)
+
+
+def price_tag(c, P, yr, price, text, s, t_in, dx=0, dy=-70):
+    x, y = P(yr, price)
+    pop(c, pill(text, 38), min(max(x + dx, 190), W - 190), y + dy, s, t_in)
+
+
+def bottom_text(c, s, rows):
+    for a, b, line, size in rows:
+        if a <= s < b:
+            big_text(c, line, size, 1530, s, a)
+
+
+def c_hist1(c, s):
+    header(c, "Nhịp tăng thứ 1", s, 318.45, y=470)
+    P = draw_chart_card(c, "f26", "c_hist1", s)
+    zone(c, P, 1982, 2002, 250, 520, "TÍCH LŨY 20 NĂM", s, 330.8, label_out=339.9)
+    rally(c, P, (2001.5, 300), (2011.6, 1800), s, 339.9)
+    price_tag(c, P, 2001.5, 300, "300 ĐÔ", s, 339.9, dx=-40, dy=70)
+    price_tag(c, P, 2011.6, 1800, "1.800 ĐÔ · 2012", s, 344.1, dx=-150, dy=-10)
+    bottom_text(c, s, [(318.4, 330.8, "LỊCH SỬ *GIÁ VÀNG*", 84), (330.8, 339.9, "*20 NĂM* TÍCH LŨY", 92),
+                       (339.9, 351.2, "*300 LÊN 1.800* ĐÔ", 92), (351.2, 999, "TĂNG *KHOẢNG 6 LẦN*", 88)])
+
+
+def c_hist2(c, s):
+    header(c, "Nhịp tăng thứ 2", s, 354.65, y=470)
+    P = draw_chart_card(c, "f92", "c_hist2", s)
+    zone(c, P, 2013, 2023, 1050, 2050, "TÍCH LŨY 10 NĂM", s, 363.0, label_out=374.4)
+    rally(c, P, (2015.0, 1080), (2025.9, 5450), s, 374.4)
+    price_tag(c, P, 2015.0, 1080, "HƠN 1.000 ĐÔ", s, 374.4, dx=40, dy=75)
+    price_tag(c, P, 2025.9, 5450, "5.600 ĐÔ", s, 376.7, dx=-160, dy=10)
+    bottom_text(c, s, [(354.6, 363.0, "NHỊP TĂNG *TIẾP THEO*", 84), (363.0, 374.4, "THÊM *10 NĂM* TÍCH LŨY", 84),
+                       (374.4, 378.6, "*HƠN 1.000 LÊN 5.600*", 84), (378.6, 999, "TĂNG *KHOẢNG 4 LẦN*", 88)])
+
+
+def c_both(c, s):
+    header(c, "Thời gian tích lũy của vàng", s, 469.75, y=470)
+    P = draw_chart_card(c, "f97", "c_both", s)
+    zone(c, P, 1982, 2002, 150, 700, "20 NĂM", s, 470.7)
+    zone(c, P, 2013, 2023, 1050, 2100, "10 NĂM", s, 471.3)
+    bottom_text(c, s, [(469.7, 474.1, "*20 NĂM* VÀ *10 NĂM*", 88), (474.1, 999, "TÍCH LŨY *NGẮN LẠI*", 92)])
+
+
+GRAPHICS.update({"c_hist1": c_hist1, "c_hist2": c_hist2, "c_both": c_both})
 
 
 # ============================================================ compose
@@ -837,9 +1004,9 @@ def write_wav(path, x):
         w.writeframes((st * 32767).astype(np.int16).tobytes())
 
 
-POPS = [32.0, 36.60, 60.9, 99.20, 108.24, 141.50, 153.74, 182.1, 215.2, 220.8, 330.8, 351.2, 363.0, 470.7,
-        471.3, 493.7, 500.7, 548.9, 554.1, 558.8]
-DINGS = [30.90, 45.50, 59.12, 76.32, 183.3, 186.6, 235.6, 339.9, 374.4, 474.1, 566.8]
+POPS = [32.0, 36.60, 60.9, 99.20, 108.24, 141.50, 153.74, 182.1, 215.2, 220.8, 331.0, 344.1, 351.2, 363.2, 376.7,
+        378.6, 470.9, 471.5, 493.7, 500.7, 548.9, 554.1, 558.8]
+DINGS = [30.90, 45.50, 59.12, 76.32, 183.3, 186.6, 235.6, 339.9, 374.4, 474.1, 566.8]  # 339.9/374.4: mũi tên tăng
 
 
 def render_audio(path):
