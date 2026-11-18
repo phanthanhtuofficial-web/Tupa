@@ -1,7 +1,7 @@
 """Dựng video "Vàng thủng hỗ trợ 3.850" (18/11/2026, tốc độ 1.1x).
-Nguồn: work/v1.mov (1080x1920, 30fps). Chèn 4 ảnh chart người dùng gửi (edit/assets/thung-3850).
+Nguồn: work/v1_combo.mp4 (tạo bằng edit/build_combo_thung-3850.sh từ v1.mov + 3 clip chèn). Chèn 4 ảnh chart người dùng gửi (edit/assets/thung-3850).
 
-Chạy:  CUTS=edit/cuts_vang-thung-3850.json python render_vang-thung-3850.py <video> <thu_muc_font> <output.mp4>
+Chạy:  CUTS=edit/cuts_vang-thung-3850.json python render_vang-thung-3850.py work/v1_combo.mp4 <thu_muc_font> <output.mp4>
 Mọi mốc thời gian trong file này tính theo GIÂY CỦA VIDEO GỐC (src).
 """
 import math
@@ -24,14 +24,43 @@ WHITE = (255, 255, 255)
 GREY = (190, 190, 190)
 
 # ============================================================ cắt khoảng lặng
-SILENCES = []  # dùng CUTS=edit/cuts_vang-0611.json
-END = 268.20
+SILENCES = []  # dùng CUTS=edit/cuts_vang-thung-3850.json
+# Nguồn ghép (work/v1_combo.mp4) = v1.mov + 3 clip chèn. (tên, bắt đầu trong nguồn ghép, bắt đầu trong clip gốc, độ dài)
+# a8  = clip 8s "vàng đang giao dịch quanh 3.780" (đã xoá logo TikTok, lấy 0.95–5.55s)
+# b15 = video cũ 15s (0–9.05s), c32 = video cũ 32s (9.1–17.75s). Xem edit/build_combo_thung-3850.sh
+PIECES = [("v1", 0.0, 0.0, 27.5), ("a8", 27.5, 0.0, 4.6), ("v1", 32.1, 27.5, 10.7),
+          ("b15", 42.8, 0.0, 9.066667), ("c32", 51.866667, 0.0, 8.666667), ("v1", 60.533333, 38.2, 232.8)]
+
+
+def T(t):
+    """giây của v1.mov -> giây của nguồn ghép."""
+    for nm, cs, ss, ln in PIECES:
+        if nm == "v1" and ss <= t < ss + ln:
+            return cs + t - ss
+    return PIECES[-1][1] + t - PIECES[-1][2]
+
+
+def where(tc):
+    """giây của nguồn ghép -> (tên đoạn, giây trong đoạn đó)."""
+    for nm, cs, ss, ln in PIECES:
+        if cs <= tc < cs + ln:
+            return nm, ss + tc - cs
+    nm, cs, ss, ln = PIECES[-1]
+    return nm, ss + tc - cs
+
+
+END = T(268.20)
 SPEED = float(os.environ.get("SPEED", "1.1"))  # tăng tốc toàn video, giữ cao độ giọng
 PAD = 0.09
 # Nếu có CUTS=<cuts.json> (tạo bởi edit/find_cuts.py: lặng + à/ừm + vấp + lặp từ) thì dùng danh sách đó.
 if os.environ.get("CUTS"):
     import json
-    CUT_LIST = [(s, e) for s, e, *_ in json.load(open(os.environ["CUTS"]))]
+    CUT_LIST = []
+    for s, e, *_ in json.load(open(os.environ["CUTS"])):  # mốc theo v1.mov -> đổi sang nguồn ghép
+        for nm, cs, ss, ln in PIECES:
+            a_, b_ = max(s, ss), min(e, ss + ln if nm != PIECES[-1][0] or cs != PIECES[-1][1] else 1e9)
+            if nm == "v1" and b_ > a_:
+                CUT_LIST.append((cs + a_ - ss, cs + b_ - ss))
 else:
     CUT_LIST = [(s + PAD, e - PAD) for s, e in SILENCES if e - s > 0.3]
 SEGS, cur = [], 0.0
@@ -66,7 +95,8 @@ def out_time(src):
 SCENES = [
     (0.00, 22.55, "head"),
     (22.55, 27.50, "h4"),
-    (27.50, 44.90, "head"),
+    (27.50, 38.20, "m_proof"),
+    (38.20, 44.90, "head"),
     (44.90, 61.40, "c_target1"),
     (61.40, 80.30, "head"),
     (80.30, 98.80, "c_confluence"),
@@ -83,11 +113,16 @@ HOOK_END = 6.20
 DISC_AT = 264.70
 
 
-def scene_at(src):
+def scene_at(tc):
+    nm, src = where(tc)
+    if nm != "v1":
+        for n2, cs, ss, ln in PIECES:
+            if n2 == nm:
+                return nm, cs, cs + ln
     for a, b, sc in SCENES:
         if a <= src < b:
             return sc, a, b
-    return "head", 0.0, END
+    return "head", 0.0, 999.0
 
 
 FR_SCENE = [scene_at(s) for s, _ in frames]
@@ -441,7 +476,6 @@ def grab(t):
 CAPTIONS = [
     (13.10, 21.50, ["SÁNG NAY VỪA NGỦ DẬY", "*MỞ CHART RA NHÌN*"], [60, 84]),
     (21.50, 23.30, ["*SANG CHẤN*", "*TÂM LÝ LUÔN*"], [96, 96]),
-    (27.30, 38.90, ["VÙNG HỖ TRỢ", "*CỰC KỲ QUAN TRỌNG*"], [60, 88]),
     (38.90, 44.90, ["THỦNG VÙNG NÀY", "*VỀ VÙNG GIÁ RẤT SÂU*"], [60, 84]),
     (61.40, 64.00, ["TẠI SAO", "*MÌNH NÓI NHƯ VẬY?*"], [64, 84]),
     (98.80, 103.30, ["NẾU VÀNG *GIỮ ĐƯỢC*", "*VÙNG NÀY*"], [64, 96]),
@@ -654,6 +688,142 @@ def draw_card(sc, src, a):
     return c
 
 
+# ============================================================ đoạn chèn: clip 8s, ảnh nhận định, video cũ
+A8_CAPS = [(0.0, 9.0, ["HIỆN TẠI VÀNG GIAO DỊCH", "*QUANH 3.780 $/oz*"], [58, 96])]
+
+
+def draw_a8(src_rgb, t):
+    z = 1.14 + 0.03 * t / 4.6
+    cw, ch = W / z, H / z
+    x0, y0 = (W - cw) / 2, min(max(1020 - 800 / z, 0), H - ch)
+    canvas = Image.fromarray(src_rgb).resize((W, H), Image.BICUBIC, box=(x0, y0, x0 + cw, y0 + ch)).convert("RGBA")
+    canvas.alpha_composite(SHADE)
+    for a, b, lines, sizes in A8_CAPS:
+        if a <= t < b:
+            p = (t - a) / 0.16
+            paste_center(canvas, rich_block(lines, sizes), 540, 1530, scale=0.88 + 0.12 * ease_back(p),
+                         alpha=ease_out(p * 1.5))
+    return canvas
+
+
+# Ảnh chụp nhận định (theo thứ tự thời gian): (file, vùng khung đỏ x0,y0,x1,y1, nhãn ngày, giây v1 hiện ra)
+PROOFS = [
+    ("p1_0611", (13, 1034, 940, 1534), "06/11", 27.80),
+    ("p2", (288, 334, 1145, 759), None, 28.95),
+    ("p3_0811", (54, 170, 949, 742), "08/11", 30.05),
+    ("p4", (278, 184, 1153, 681), None, 31.10),
+    ("p5_1311", (272, 865, 1127, 1401), "13/11", 32.10),
+    ("p6_1311", (293, 866, 1130, 1401), "13/11", 33.75),
+    ("p7_1311", (294, 1274, 1115, 1700), "13/11", 35.00),
+]
+PROOF_T = [p[3] for p in PROOFS]
+PROOF_STAMP = 36.30
+
+
+def proof_card(k):
+    key = ("proof", k)
+    if key not in _cache:
+        name, box, date, _ = PROOFS[k]
+        im = Image.open(os.path.join(IMGDIR, name + ".jpg")).convert("RGBA")
+        m = 18
+        im = im.crop((max(box[0] - m, 0), max(box[1] - m, 0), min(box[2] + m, im.width), min(box[3] + m, im.height)))
+        sc = min(940 / im.width, 900 / im.height)
+        im = im.resize((int(im.width * sc), int(im.height * sc)), Image.LANCZOS)
+        mask = Image.new("L", im.size, 0)
+        ImageDraw.Draw(mask).rounded_rectangle([0, 0, im.width - 1, im.height - 1], radius=22, fill=255)
+        im.putalpha(mask)
+        pad, top = 50, 110
+        card = Image.new("RGBA", (im.width + pad * 2, im.height + pad + top), (0, 0, 0, 0))
+        ImageDraw.Draw(card).rounded_rectangle([pad - 5, top - 5, pad + im.width + 4, top + im.height + 4], radius=26,
+                                               fill=GOLD + (255,))
+        card.alpha_composite(im, (pad, top))
+        card = shadowed(with_glow(card, 26, 0.8), radius=18, opacity=0.95, offset=(0, 12))
+        if date:
+            tg = pill("NGÀY " + date, 36, gold=False)
+            card.alpha_composite(tg, (0, max(0, top - tg.height + 25)))
+        _cache[key] = card
+    return _cache[key]
+
+
+def rotated(img, deg):
+    key = ("rot", id(img), round(deg, 1))
+    if key not in _cache:
+        _cache[key] = img.rotate(deg, Image.BICUBIC, expand=True)
+    return _cache[key]
+
+
+def draw_proof(s):
+    c = BG.copy()
+    header(c, "Nhận định mình đã chia sẻ", s, 27.55, y=210)
+    shown = [k for k, p in enumerate(PROOFS) if s >= p[3]]
+    if not shown:
+        return c
+    cur = shown[-1]
+    for k in shown[-3:]:  # 2 ảnh trước lùi ra sau, tối đi
+        depth = cur - k
+        card = proof_card(k)
+        deg = (-4 if k % 2 == 0 else 4) * (1 if depth == 0 else 1.6)
+        t = s - PROOFS[k][3]
+        if depth == 0:
+            p = t / 0.26
+            scale = 1.35 - 0.35 * ease_back(p)
+            alpha = ease_out(p * 2.2)
+            dx = (1 - ease_out(p)) * (260 if k % 2 == 0 else -260)
+            img = rotated(card, deg)
+            paste_center(c, img, 540 + dx, 1000, scale=scale, alpha=alpha)
+        else:
+            img = rotated(card, deg).copy()
+            dark = Image.new("RGBA", img.size, (0, 0, 0, 0))
+            dark.putalpha(img.split()[3].point(lambda v: int(v * (0.45 + 0.15 * depth))))
+            img.alpha_composite(dark)
+            paste_center(c, img, 540 + (-70 if k % 2 == 0 else 70) * depth, 1000 - 60 * depth, scale=0.9 - 0.06 * depth)
+    tf = s - PROOFS[cur][3]  # chớp sáng khi ảnh mới bật ra
+    if tf < 0.12:
+        fl = Image.new("RGBA", (W, H), (255, 255, 255, int(70 * (1 - tf / 0.12))))
+        c.alpha_composite(fl)
+    if s >= PROOF_STAMP:
+        pop(c, pill("ĐÃ CHIA SẺ RẤT NHIỀU LẦN", 56, sub="VÙNG HỖ TRỢ CỰC KỲ QUAN TRỌNG"), 540, 1640, s, PROOF_STAMP)
+    return c
+
+
+CLIP_LABEL = {"b15": ("VIDEO NHẬN ĐỊNH TRƯỚC ĐÂY", "Thủng 3.870 – 3.900: về vùng giá rất sâu"),
+              "c32": ("VIDEO XU HƯỚNG DÀI HẠN", "Vùng hỗ trợ cực kỳ quan trọng 3.880 – 3.900")}
+
+
+def draw_clip(nm, src_rgb, t):
+    fr = Image.fromarray(src_rgb)
+    bg = fr.resize((W // 10, H // 10), Image.BILINEAR).filter(ImageFilter.GaussianBlur(3)).resize((W, H), Image.BILINEAR)
+    bg = Image.blend(bg, Image.new("RGB", (W, H), (0, 0, 0)), 0.62).convert("RGBA")
+    sc = 0.70
+    cw, ch = int(W * sc), int(H * sc)
+    v = fr.resize((cw, ch), Image.BILINEAR).convert("RGBA")
+    key = ("clipframe", cw, ch)
+    if key not in _cache:
+        m = Image.new("L", (cw, ch), 0)
+        ImageDraw.Draw(m).rounded_rectangle([0, 0, cw - 1, ch - 1], radius=28, fill=255)
+        f = Image.new("RGBA", (cw + 16, ch + 16), (0, 0, 0, 0))
+        ImageDraw.Draw(f).rounded_rectangle([0, 0, cw + 15, ch + 15], radius=34, fill=GOLD + (255,))
+        _cache[key] = (m, with_glow(f, 30, 1.0))
+    m, f = _cache[key]
+    v.putalpha(m)
+    card = f.copy()
+    card.alpha_composite(v, (8, 8))
+    p = t / 0.32
+    paste_center(bg, card, 540, 1010, scale=0.55 + 0.45 * ease_back(p), alpha=ease_out(p * 2))
+    top, sub = CLIP_LABEL[nm]
+    pop(bg, pill(top, 46), 540, 150, t, 0.15)
+    lay = Image.new("RGBA", (W, 80), (0, 0, 0, 0))  # chấm đỏ nhấp nháy "XEM LẠI"
+    d = ImageDraw.Draw(lay)
+    if int(t * 2.5) % 2 == 0:
+        d.ellipse([370, 22, 402, 54], fill=(235, 45, 55, 255))
+    d.text((418, 38), "XEM LẠI", font=font("Black", 40), fill=WHITE, anchor="lm")
+    if t >= 0.3:
+        bg.alpha_composite(lay, (0, 228))
+    if t >= 0.5:
+        pop(bg, rich_block([sub], [40], weight="ExtraBold"), 540, 1740, t, 0.5)
+    return bg
+
+
 # ============================================================ các cảnh đồ họa
 def g_macro(c, s):
     header(c, "Vì sao vàng chịu áp lực", s, 157.45)
@@ -698,11 +868,18 @@ def motion_blur_x(arr, k):
 
 
 def compose(i, src_rgb):
-    src, si = frames[i]
+    src_c, si = frames[i]
+    nm, src = where(src_c)
     sc, a, b = FR_SCENE[i]
-    prog = (src - a) / max(b - a, 1e-3)
-    if sc == "head":
-        z = head_zoom(src, si, a)
+    prog = ((src if nm == "v1" else src_c) - a) / max(b - a, 1e-3)
+    if sc == "a8":
+        canvas = draw_a8(src_rgb, src)
+    elif sc in ("b15", "c32"):
+        canvas = draw_clip(sc, src_rgb, src)
+    elif sc == "m_proof":
+        canvas = draw_proof(src)
+    elif sc == "head":
+        z = head_zoom(src_c, si, a)
         img = Image.fromarray(src_rgb)
         cw, ch = W / z, H / z
         x0 = min(max(540 - cw / 2, 0), W - cw)
@@ -811,6 +988,14 @@ def sfx_boom():
     return (s + click) * 0.8
 
 
+def sfx_shutter():
+    n = int(SR * 0.12)
+    x = np.random.default_rng(9).normal(0, 1, n)
+    e = tone_env(n, 0.0005, 0.012) + 0.6 * np.roll(tone_env(n, 0.0005, 0.015), int(SR * 0.055))
+    hp = x - np.convolve(x, np.ones(6) / 6, mode="same")
+    return hp * e * 0.55
+
+
 def music(n):
     t = np.arange(n) / SR
     bar = 4 * 60 / 75
@@ -887,11 +1072,21 @@ def render_audio(path):
     for bnd in WHIPS:
         add(sfx_whoosh(), bnd / FPS - 0.25)
     for t in POPS:
-        add(sfx_pop(), out_time(t))
+        add(sfx_pop(), out_time(T(t)))
     for t in DINGS:
-        add(sfx_ding(), out_time(t))
+        add(sfx_ding(), out_time(T(t)))
     for c in CAPTIONS:
-        add(sfx_pop(), out_time(c[0]), 0.45)
+        add(sfx_pop(), out_time(T(c[0])), 0.45)
+    for t in PROOF_T:  # ảnh nhận định nảy ra: whoosh ngắn + tiếng chụp + pop
+        add(sfx_whoosh(0.28), out_time(T(t)) - 0.16, 0.7)
+        add(sfx_shutter(), out_time(T(t)), 0.9)
+        add(sfx_pop(), out_time(T(t)) + 0.03, 0.6)
+    add(sfx_boom(), out_time(T(PROOF_STAMP)), 0.55)
+    add(sfx_ding(), out_time(T(PROOF_STAMP)) + 0.05)
+    for nm2, cs, ss, ln in PIECES:  # clip chèn bật ra: boom nhẹ + ding
+        if nm2 in ("b15", "c32"):
+            add(sfx_boom(), out_time(cs), 0.45)
+            add(sfx_ding(), out_time(cs + 0.25), 0.8)
     write_wav(os.path.join(WORK, "fx.wav"), fx)
     mus = music(n)
     mus /= np.max(np.abs(mus)) + 1e-9
@@ -912,7 +1107,7 @@ if __name__ == "__main__":
     if PREVIEW:
         ims = []
         for st in [float(x) for x in PREVIEW.split(",")]:  # thời gian theo video gốc
-            i = min(int(round(out_time(st) * FPS)), N - 1)
+            i = min(int(round(out_time(st) * FPS)), N - 1)  # PREVIEW: giây của nguồn ghép
             ims.append(Image.fromarray(compose(i, np.asarray(grab(frames[i][0]).convert("RGB")))).resize((270, 480)))
         cols = 6
         sheet = Image.new("RGB", (270 * cols, 480 * math.ceil(len(ims) / cols)))
