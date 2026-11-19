@@ -28,8 +28,9 @@ SILENCES = []  # dùng CUTS=edit/cuts_vang-thung-3850.json
 # Nguồn ghép (work/v1_combo.mp4) = v1.mov + 3 clip chèn. (tên, bắt đầu trong nguồn ghép, bắt đầu trong clip gốc, độ dài)
 # a8  = clip 8s "vàng đang giao dịch quanh 3.780" (đã xoá logo TikTok, lấy 0.95–5.55s)
 # b15 = video cũ 15s (0–9.05s), c32 = video cũ 32s (9.1–17.75s). Xem edit/build_combo_thung-3850.sh
-PIECES = [("v1", 0.0, 0.0, 27.5), ("a8", 27.5, 0.0, 4.6), ("v1", 32.1, 27.5, 10.7),
-          ("b15", 42.8, 0.0, 9.066667), ("c32", 51.866667, 0.0, 8.666667), ("v1", 60.533333, 38.2, 232.8)]
+# hold = 16.2s nền đen im lặng: kéo dài đoạn ảnh nhận định cho người xem kịp đọc (giọng dừng, nhạc + SFX chạy)
+PIECES = [("v1", 0.0, 0.0, 27.5), ("a8", 27.5, 0.0, 4.6), ("v1", 32.1, 27.5, 10.7), ("hold", 42.8, 0.0, 16.2),
+          ("b15", 59.0, 0.0, 9.066667), ("c32", 68.066667, 0.0, 8.666667), ("v1", 76.733333, 38.2, 232.8)]
 
 
 def T(t):
@@ -115,6 +116,8 @@ DISC_AT = 264.70
 
 def scene_at(tc):
     nm, src = where(tc)
+    if nm == "hold":
+        return "m_proof", 27.5, 38.2
     if nm != "v1":
         for n2, cs, ss, ln in PIECES:
             if n2 == nm:
@@ -706,25 +709,31 @@ def draw_a8(src_rgb, t):
     return canvas
 
 
-# Ảnh chụp nhận định (theo thứ tự thời gian): (file, vùng khung đỏ x0,y0,x1,y1, nhãn ngày, giây v1 hiện ra)
+# Ảnh chụp nhận định (theo thứ tự thời gian): (file, vùng cần làm nổi (ô đỏ) x0,y0,x1,y1, nhãn ngày)
 PROOFS = [
-    ("p1_0611", (13, 1034, 940, 1534), "06/11", 27.80),
-    ("p2", (288, 334, 1145, 759), None, 28.95),
-    ("p3_0811", (54, 170, 949, 742), "08/11", 30.05),
-    ("p4", (278, 184, 1153, 681), None, 31.10),
-    ("p5_1311", (272, 865, 1127, 1401), "13/11", 32.10),
-    ("p6_1311", (293, 866, 1130, 1401), "13/11", 33.75),
-    ("p7_1311", (294, 1274, 1115, 1700), "13/11", 35.00),
+    ("n1_0905", (26, 370, 1150, 939), "09/05"),
+    ("n2", (19, 479, 1156, 1086), None),
+    ("n3_0611", (102, 754, 1086, 1597), "06/11"),
+    ("p1_0611", (13, 1034, 940, 1534), "06/11"),
+    ("p2", (288, 334, 1145, 759), None),
+    ("p3_0811", (54, 170, 949, 742), "08/11"),
+    ("p4", (278, 184, 1153, 681), None),
+    ("p5_1311", (272, 865, 1127, 1401), "13/11"),
+    ("p6_1311", (293, 866, 1130, 1401), "13/11"),
+    ("p7_1311", (294, 1274, 1115, 1700), "13/11"),
 ]
-PROOF_T = [p[3] for p in PROOFS]
-PROOF_STAMP = 36.30
+PROOF_M0 = out_time(T(27.5))  # giây output lúc bắt đầu đoạn ảnh
+PROOF_LEN = out_time(59.0) - PROOF_M0  # lời nói + đoạn giữ hình (đến lúc clip b15 bắt đầu)
+PROOF_D = (PROOF_LEN - 1.6) / len(PROOFS)  # mỗi ảnh ~2 giây
+PROOF_OT = [0.05 + k * PROOF_D for k in range(len(PROOFS))]  # giây tính từ đầu đoạn ảnh
+PROOF_STAMP_OT = PROOF_LEN - 1.55
 
 
 def proof_card(k):
     """Nguyên ảnh chụp màn hình (thấy rõ giao diện Zalo/Telegram) + vị trí ô đỏ trên thẻ."""
     key = ("proof", k)
     if key not in _cache:
-        name, box, date, _ = PROOFS[k]
+        name, box, date = PROOFS[k]
         im = Image.open(os.path.join(IMGDIR, name + ".jpg")).convert("RGBA")
         sc = min(900 / im.width, 1380 / im.height)
         full = im.resize((int(im.width * sc), int(im.height * sc)), Image.LANCZOS)
@@ -761,10 +770,10 @@ def hi_scale(hi, w):
     return max(1.12, min(1000 / hi.width, 2.2)) if w else 1.0
 
 
-def draw_proof(s):
+def draw_proof(s):  # s = giây output tính từ đầu đoạn ảnh
     c = BG.copy()
-    header(c, "Nhận định mình đã chia sẻ", s, 27.55, y=150)
-    shown = [k for k, p in enumerate(PROOFS) if s >= p[3]]
+    header(c, "Nhận định mình đã chia sẻ", s, 0.02, y=150)
+    shown = [k for k in range(len(PROOFS)) if s >= PROOF_OT[k]]
     if not shown:
         return c
     cur = shown[-1]
@@ -778,7 +787,7 @@ def draw_proof(s):
         img.alpha_composite(dark)
         paste_center(c, img, 540 + (-60 if k % 2 == 0 else 60) * depth, CY - 30 * depth, scale=0.92 - 0.05 * depth)
     card, hi, pos, (px, py, fw, fh) = proof_card(cur)
-    t = s - PROOFS[cur][3]
+    t = s - PROOF_OT[cur]
     p = t / 0.24  # 1) cả ảnh bay vào
     dx = (1 - ease_out(p)) * (300 if cur % 2 == 0 else -300)
     scale = 1.25 - 0.25 * ease_back(p)
@@ -802,8 +811,8 @@ def draw_proof(s):
         paste_center(c, _cache[key], hx, hy, scale=z, alpha=min(1.0, q * 1.5))
     if t < 0.12:  # chớp sáng khi ảnh mới bật ra
         c.alpha_composite(Image.new("RGBA", (W, H), (255, 255, 255, int(70 * (1 - t / 0.12)))))
-    if s >= PROOF_STAMP:
-        pop(c, pill("ĐÃ CHIA SẺ RẤT NHIỀU LẦN", 54, sub="VÙNG HỖ TRỢ CỰC KỲ QUAN TRỌNG"), 540, 1790, s, PROOF_STAMP)
+    if s >= PROOF_STAMP_OT:
+        pop(c, pill("ĐÃ CHIA SẺ RẤT NHIỀU LẦN", 54, sub="VÙNG HỖ TRỢ CỰC KỲ QUAN TRỌNG"), 540, 1790, s, PROOF_STAMP_OT)
     return c
 
 
@@ -898,7 +907,7 @@ def compose(i, src_rgb):
     elif sc in ("b15", "c32"):
         canvas = draw_clip(sc, src_rgb, src)
     elif sc == "m_proof":
-        canvas = draw_proof(src)
+        canvas = draw_proof(i / FPS - PROOF_M0)
     elif sc == "head":
         z = head_zoom(src_c, si, a)
         img = Image.fromarray(src_rgb)
@@ -1098,12 +1107,13 @@ def render_audio(path):
         add(sfx_ding(), out_time(T(t)))
     for c in CAPTIONS:
         add(sfx_pop(), out_time(T(c[0])), 0.45)
-    for t in PROOF_T:  # ảnh nhận định nảy ra: whoosh ngắn + tiếng chụp + pop
-        add(sfx_whoosh(0.28), out_time(T(t)) - 0.16, 0.7)
-        add(sfx_shutter(), out_time(T(t)), 0.9)
-        add(sfx_pop(), out_time(T(t)) + 0.03, 0.6)
-    add(sfx_boom(), out_time(T(PROOF_STAMP)), 0.55)
-    add(sfx_ding(), out_time(T(PROOF_STAMP)) + 0.05)
+    for t in PROOF_OT:  # ảnh nhận định nảy ra: whoosh ngắn + tiếng chụp + pop; ô đỏ phóng to: ding nhẹ
+        add(sfx_whoosh(0.28), PROOF_M0 + t - 0.16, 0.7)
+        add(sfx_shutter(), PROOF_M0 + t, 0.9)
+        add(sfx_pop(), PROOF_M0 + t + 0.03, 0.6)
+        add(sfx_ding(), PROOF_M0 + t + 0.32, 0.45)
+    add(sfx_boom(), PROOF_M0 + PROOF_STAMP_OT, 0.55)
+    add(sfx_ding(), PROOF_M0 + PROOF_STAMP_OT + 0.05)
     for nm2, cs, ss, ln in PIECES:  # clip chèn bật ra: boom nhẹ + ding
         if nm2 in ("b15", "c32"):
             add(sfx_boom(), out_time(cs), 0.45)

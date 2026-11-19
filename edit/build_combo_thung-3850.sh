@@ -11,5 +11,7 @@ ffmpeg -v error -y -ss 27.5 -t 10.7 -i v1.mov -vf "$V" $E pc/p2.mp4
 ffmpeg -v error -y -ss 0 -t 9.05 -i ins/b15.mov -vf "$V" $E pc/p3.mp4
 ffmpeg -v error -y -ss 9.1 -t 8.65 -i ins/c32.mov -vf "$V" $E pc/p4.mp4
 ffmpeg -v error -y -ss 38.2 -i v1.mov -vf "$V" $E pc/p5.mp4
-for i in 0 1 2 3 4 5; do echo "file 'p$i.mp4'"; done > pc/list.txt
+# đoạn giữ hình 16.2s (nền đen, im lặng) cho ảnh nhận định
+ffmpeg -v error -y -f lavfi -i color=c=black:s=1080x1920:r=30:d=16.2 -f lavfi -i anullsrc=r=48000:cl=stereo -t 16.2 $E -pix_fmt yuv420p pc/ph.mp4
+printf "file '%s'\n" p0.mp4 p1.mp4 p2.mp4 ph.mp4 p3.mp4 p4.mp4 p5.mp4 > pc/list.txt
 ffmpeg -v error -y -f concat -safe 0 -i pc/list.txt -c copy v1_combo.mp4
