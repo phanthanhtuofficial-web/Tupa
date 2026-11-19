@@ -721,27 +721,31 @@ PROOF_STAMP = 36.30
 
 
 def proof_card(k):
+    """Nguyên ảnh chụp màn hình (thấy rõ giao diện Zalo/Telegram) + vị trí ô đỏ trên thẻ."""
     key = ("proof", k)
     if key not in _cache:
         name, box, date, _ = PROOFS[k]
         im = Image.open(os.path.join(IMGDIR, name + ".jpg")).convert("RGBA")
-        m = 18
-        im = im.crop((max(box[0] - m, 0), max(box[1] - m, 0), min(box[2] + m, im.width), min(box[3] + m, im.height)))
-        sc = min(940 / im.width, 900 / im.height)
-        im = im.resize((int(im.width * sc), int(im.height * sc)), Image.LANCZOS)
-        mask = Image.new("L", im.size, 0)
-        ImageDraw.Draw(mask).rounded_rectangle([0, 0, im.width - 1, im.height - 1], radius=22, fill=255)
-        im.putalpha(mask)
+        sc = min(900 / im.width, 1380 / im.height)
+        full = im.resize((int(im.width * sc), int(im.height * sc)), Image.LANCZOS)
+        mask = Image.new("L", full.size, 0)
+        ImageDraw.Draw(mask).rounded_rectangle([0, 0, full.width - 1, full.height - 1], radius=26, fill=255)
+        full.putalpha(mask)
         pad, top = 50, 110
-        card = Image.new("RGBA", (im.width + pad * 2, im.height + pad + top), (0, 0, 0, 0))
-        ImageDraw.Draw(card).rounded_rectangle([pad - 5, top - 5, pad + im.width + 4, top + im.height + 4], radius=26,
-                                               fill=GOLD + (255,))
-        card.alpha_composite(im, (pad, top))
-        card = shadowed(with_glow(card, 26, 0.8), radius=18, opacity=0.95, offset=(0, 12))
+        card = Image.new("RGBA", (full.width + pad * 2, full.height + pad + top), (0, 0, 0, 0))
+        ImageDraw.Draw(card).rounded_rectangle([pad - 5, top - 5, pad + full.width + 4, top + full.height + 4],
+                                               radius=30, fill=(70, 70, 76, 255))
+        card.alpha_composite(full, (pad, top))
+        card = shadowed(card, radius=18, opacity=0.95, offset=(0, 12))
         if date:
             tg = pill("NGÀY " + date, 36, gold=False)
             card.alpha_composite(tg, (0, max(0, top - tg.height + 25)))
-        _cache[key] = card
+        m = 10  # ô đỏ (cắt từ ảnh gốc, nét hơn) + vị trí trên thẻ
+        bx = (max(box[0] - m, 0), max(box[1] - m, 0), min(box[2] + m, im.width), min(box[3] + m, im.height))
+        hi = im.crop(bx)
+        hi = hi.resize((max(1, int(hi.width * sc)), max(1, int(hi.height * sc))), Image.LANCZOS)
+        pos = (pad + bx[0] * sc + hi.width / 2, top + bx[1] * sc + hi.height / 2)
+        _cache[key] = (card, hi, pos, (pad, top, full.width, full.height))
     return _cache[key]
 
 
@@ -752,37 +756,54 @@ def rotated(img, deg):
     return _cache[key]
 
 
+def hi_scale(hi, w):
+    """Phóng ô đỏ: tối đa rộng 1000px, to hơn tối thiểu 12%."""
+    return max(1.12, min(1000 / hi.width, 2.2)) if w else 1.0
+
+
 def draw_proof(s):
     c = BG.copy()
-    header(c, "Nhận định mình đã chia sẻ", s, 27.55, y=210)
+    header(c, "Nhận định mình đã chia sẻ", s, 27.55, y=150)
     shown = [k for k, p in enumerate(PROOFS) if s >= p[3]]
     if not shown:
         return c
     cur = shown[-1]
-    for k in shown[-3:]:  # 2 ảnh trước lùi ra sau, tối đi
+    CY = 1010
+    for k in shown[-3:-1]:  # ảnh trước lùi ra sau, nghiêng, tối đi
         depth = cur - k
-        card = proof_card(k)
-        deg = (-4 if k % 2 == 0 else 4) * (1 if depth == 0 else 1.6)
-        t = s - PROOFS[k][3]
-        if depth == 0:
-            p = t / 0.26
-            scale = 1.35 - 0.35 * ease_back(p)
-            alpha = ease_out(p * 2.2)
-            dx = (1 - ease_out(p)) * (260 if k % 2 == 0 else -260)
-            img = rotated(card, deg)
-            paste_center(c, img, 540 + dx, 1000, scale=scale, alpha=alpha)
-        else:
-            img = rotated(card, deg).copy()
-            dark = Image.new("RGBA", img.size, (0, 0, 0, 0))
-            dark.putalpha(img.split()[3].point(lambda v: int(v * (0.45 + 0.15 * depth))))
-            img.alpha_composite(dark)
-            paste_center(c, img, 540 + (-70 if k % 2 == 0 else 70) * depth, 1000 - 60 * depth, scale=0.9 - 0.06 * depth)
-    tf = s - PROOFS[cur][3]  # chớp sáng khi ảnh mới bật ra
-    if tf < 0.12:
-        fl = Image.new("RGBA", (W, H), (255, 255, 255, int(70 * (1 - tf / 0.12))))
-        c.alpha_composite(fl)
+        card = proof_card(k)[0]
+        img = rotated(card, (-5 if k % 2 == 0 else 5)).copy()
+        dark = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        dark.putalpha(img.split()[3].point(lambda v: int(v * (0.5 + 0.15 * depth))))
+        img.alpha_composite(dark)
+        paste_center(c, img, 540 + (-60 if k % 2 == 0 else 60) * depth, CY - 30 * depth, scale=0.92 - 0.05 * depth)
+    card, hi, pos, (px, py, fw, fh) = proof_card(cur)
+    t = s - PROOFS[cur][3]
+    p = t / 0.24  # 1) cả ảnh bay vào
+    dx = (1 - ease_out(p)) * (300 if cur % 2 == 0 else -300)
+    scale = 1.25 - 0.25 * ease_back(p)
+    ox, oy = 540 + dx - card.width * scale / 2, CY - card.height * scale / 2
+    paste_center(c, card, 540 + dx, CY, scale=scale, alpha=ease_out(p * 2.2))
+    q = ease_out((t - 0.30) / 0.25)  # 2) phần ngoài ô đỏ tối đi, ô đỏ phóng to nổi lên
+    if q > 0:
+        dim = Image.new("RGBA", (fw, fh), (0, 0, 0, int(150 * q)))
+        c.alpha_composite(dim, (int(ox + px * scale), int(oy + py * scale)))
+        z = 1 + (hi_scale(hi, 1) - 1) * ease_back(min(1.0, (t - 0.30) / 0.28))
+        hx = ox + pos[0] * scale
+        hy = oy + pos[1] * scale
+        hw = hi.width * z
+        hx = min(max(hx, hw / 2 + 20), W - hw / 2 - 20)  # không tràn khỏi khung hình
+        key = ("higlow", cur)
+        if key not in _cache:
+            f = Image.new("RGBA", (hi.width + 16, hi.height + 16), (0, 0, 0, 0))
+            ImageDraw.Draw(f).rounded_rectangle([0, 0, f.width - 1, f.height - 1], radius=14, fill=GOLD + (255,))
+            f.alpha_composite(hi, (8, 8))
+            _cache[key] = shadowed(with_glow(f, 30, 1.2), radius=20, opacity=0.95, offset=(0, 14))
+        paste_center(c, _cache[key], hx, hy, scale=z, alpha=min(1.0, q * 1.5))
+    if t < 0.12:  # chớp sáng khi ảnh mới bật ra
+        c.alpha_composite(Image.new("RGBA", (W, H), (255, 255, 255, int(70 * (1 - t / 0.12)))))
     if s >= PROOF_STAMP:
-        pop(c, pill("ĐÃ CHIA SẺ RẤT NHIỀU LẦN", 56, sub="VÙNG HỖ TRỢ CỰC KỲ QUAN TRỌNG"), 540, 1640, s, PROOF_STAMP)
+        pop(c, pill("ĐÃ CHIA SẺ RẤT NHIỀU LẦN", 54, sub="VÙNG HỖ TRỢ CỰC KỲ QUAN TRỌNG"), 540, 1790, s, PROOF_STAMP)
     return c
 
 
